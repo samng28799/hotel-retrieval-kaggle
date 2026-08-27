@@ -1,0 +1,21 @@
+# Default experiment configuration.
+data:
+  metadata_dir: external/Hotels-50K/input/dataset
+  n_hotels: 1000
+  cap_per_hotel: 40
+  min_train_images: 15
+  unseen_frac: 0.20
+  seed: 0
+
+download:
+  target_short_side: 256
+  workers: 24
+
+embed:
+  models: [dinov2, clip, sscd]
+  batch_size: 64
+  input_size: 224
+
+evaluate:
+  ks: [1, 10, 100]
+  splits: [seen, unseen]

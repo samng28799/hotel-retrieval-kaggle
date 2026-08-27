@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hotelret"
+version = "0.1.0"
+description = "Hotel recognition for unseen properties — image retrieval on Hotels-50K"
+authors = [{ name = "Tran-Minh-Thu Nguyen", email = "sam.nguyen@tum.de" }]
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "numpy",
+    "pandas",
+    "requests",
+    "pillow",
+]
+
+[project.optional-dependencies]
+# heavy ML deps kept optional so the data pipeline installs without them
+ml = [
+    "torch",
+    "torchvision",
+    "open_clip_torch",
+    "timm",
+    "faiss-cpu",
+]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+hotelret-audit = "hotelret.audit:main"
+hotelret-manifest = "hotelret.manifest:main"
+hotelret-download = "hotelret.download:main"
+hotelret-embed = "hotelret.embed:main"
+hotelret-evaluate = "hotelret.evaluate:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

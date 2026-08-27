@@ -1,0 +1,33 @@
+# data and large artifacts — never commit these
+data/images/
+data/embeddings/
+external/
+*.npy
+*.faiss
+*.pt
+*.pth
+*.tar.gz
+*.tar.lz4
+
+# but DO keep the small manifests and results
+!data/manifest/.gitkeep
+!results/.gitkeep
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# os / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/

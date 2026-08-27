@@ -1,0 +1,12 @@
+Third-party data and models used by this project, under their own licenses:
+
+- Hotels-50K dataset — Stylianou et al., AAAI 2019.
+  https://github.com/GWUvision/Hotels-50K
+- SSCD (sscd_disc_mixup) — Pizzi et al., CVPR 2022. MIT license.
+  https://github.com/facebookresearch/sscd-copy-detection
+- DINOv2 — Oquab et al., TMLR 2024. Apache-2.0 (code) / FAIR license (weights).
+- CLIP / open_clip — Radford et al., ICML 2021.
+- AugLy — Meta. MIT license. https://github.com/facebookresearch/AugLy
+- FAISS — Meta. MIT license. https://github.com/facebookresearch/faiss
+
+This project's own code is MIT-licensed (see LICENSE).

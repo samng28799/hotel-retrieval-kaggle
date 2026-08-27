@@ -1,0 +1,87 @@
+# Hotel Recognition for Unseen Properties
+
+Comparing image-retrieval models on Hotels-50K, with a focus on how accuracy
+holds up on hotels the model never saw during training.
+
+**Course:** Deep Learning and Decision Making, TUM
+**Author:** Tran-Minh-Thu Nguyen (`sam.nguyen@tum.de`)
+
+## What this does
+
+Given a photo taken inside a hotel, rank a gallery of known hotels by visual
+similarity and return the most likely property. The project compares several
+image encoders (DINOv2, CLIP, SSCD, and a trained ArcFace CNN) under one
+**unseen-hotel** evaluation split, and measures two effects the standard
+benchmark ignores: the resolution gap between gallery and query photos, and the
+decay of the dataset over time (it ships as URLs, not images).
+
+## Pipeline
+
+```
+audit → manifest → download → embed → index → evaluate
+```
+
+Each stage writes to disk so the expensive steps (download, embed) run once and
+everything after is cheap.
+
+| Stage | Module | Output |
+|-------|--------|--------|
+| 1. Audit link liveness | `hotelret.audit` | `results/audit.json` |
+| 2. Build subset manifest | `hotelret.manifest` | `data/manifest/*.csv` |
+| 3. Download + resize | `hotelret.download` | `data/images/…` |
+| 4. Extract embeddings | `hotelret.embed` | `data/embeddings/*.npy` |
+| 5. Build FAISS index | `hotelret.index` | in-memory / `.faiss` |
+| 6. Evaluate retrieval | `hotelret.evaluate` | `results/metrics_*.json` |
+
+## Quickstart
+
+```bash
+# 1. install
+pip install -e .
+
+# 2. get the dataset metadata (14 MB, ships in the official repo)
+git clone --depth 1 https://github.com/GWUvision/Hotels-50K.git external/Hotels-50K
+tar xzf external/Hotels-50K/input/dataset.tar.gz -C external/Hotels-50K/input/
+
+# 3. GO/NO-GO: is the data still reachable, and does loss cluster by hotel?
+python -m hotelret.audit --metadata external/Hotels-50K/input/dataset --probe 300
+
+# 4. build the working subset (1000 hotels)
+python -m hotelret.manifest --metadata external/Hotels-50K/input/dataset --hotels 1000
+
+# 5. download (resumable) — only after audit says GO
+python -m hotelret.download --manifest data/manifest/gallery.csv --out data/images
+
+# 6. embed with a chosen encoder
+python -m hotelret.embed --images data/images --model dinov2 --out data/embeddings/dinov2.npy
+
+# 7. evaluate on the unseen-hotel split
+python -m hotelret.evaluate --embeddings data/embeddings/dinov2.npy --split unseen
+```
+
+## Notebooks
+
+- `notebooks/00_feasibility.ipynb` — the data audit as an interactive report
+  (run this first, on Colab, before committing to the download).
+
+## Fallback
+
+If the audit shows severe or clustered link loss, switch the data source to the
+Kaggle *Hotel-ID 2022 (FGVC9)* competition, which ships decoded image files.
+Only the occlusion experiment depends on Hotels-50K specifically.
+
+## Status
+
+- [x] Repo scaffold
+- [ ] Round-2 audit run (clustering + resolution check) — **do this first**
+- [ ] Download subset
+- [ ] Baseline embeddings (DINOv2, CLIP, SSCD)
+- [ ] Trained ArcFace baseline
+- [ ] Unseen-hotel evaluation
+- [ ] Resolution + occlusion arms
+- [ ] Report
+
+## License
+
+Code: MIT. The Hotels-50K data and the third-party models keep their own
+licenses (see `NOTICE`).
