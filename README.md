@@ -64,21 +64,27 @@ python -m hotelret.evaluate --embeddings data/embeddings/dinov2.npy --split unse
 - `notebooks/00_feasibility.ipynb` — the data audit as an interactive report
   (run this first, on Colab, before committing to the download).
 
-## Fallback
+## Data source
 
-If the audit shows severe or clustered link loss, switch the data source to the
-Kaggle *Hotel-ID 2022 (FGVC9)* competition, which ships decoded image files.
-Only the occlusion experiment depends on Hotels-50K specifically.
+**Primary: Kaggle Hotel-ID 2022 (FGVC9).** The Hotels-50K feasibility audit
+returned STOP — 67% link survival with 15x overdispersion, meaning whole hotels
+have vanished from the source CDN rather than each gallery thinning evenly. We
+therefore use the Kaggle dataset, which ships decoded image files and cannot
+decay. The measured decay of Hotels-50K is itself reported as a finding.
+
+`hotelret.kaggle_data` handles both the competition layout and the pre-resized
+256x256 mirror. The audit code (`hotelret.audit`) is kept for reproducibility.
 
 ## Status
 
 - [x] Repo scaffold
-- [ ] Round-2 audit run (clustering + resolution check) — **do this first**
-- [ ] Download subset
+- [x] Round-2 audit run — **Hotels-50K STOP** (clustered link loss, 15x overdispersion)
+- [x] Kaggle adapter + tests (both dataset layouts)
+- [x] Colab run-all notebook (Kaggle path)
+- [ ] Download Kaggle subset
 - [ ] Baseline embeddings (DINOv2, CLIP, SSCD)
 - [ ] Trained ArcFace baseline
 - [ ] Unseen-hotel evaluation
-- [ ] Resolution + occlusion arms
 - [ ] Report
 
 ## License
