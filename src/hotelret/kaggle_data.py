@@ -30,31 +30,50 @@ def _find_train_csv(root: Path) -> Path | None:
     return None
 
 
+IMAGE_EXTS = ("*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG", "*.webp")
+
+
+def _all_images(root: Path):
+    """All image files under root, across common extensions."""
+    out = []
+    for ext in IMAGE_EXTS:
+        out.extend(root.rglob(ext))
+    return out
+
+
 def load_index(root: str | Path) -> pd.DataFrame:
     """Return a DataFrame with columns image_id, hotel_id, path.
 
     Works with either the competition layout (folders per hotel) or the
-    resized-mirror layout (flat images/ + train.csv).
+    resized-mirror layout (flat images/ + train.csv). Falls back gracefully:
+    if a CSV exists but its image_ids don't line up with files on disk, it
+    infers labels from the folder structure instead of returning nothing.
     """
     root = Path(root)
+    imgs = _all_images(root)
+    if not imgs:
+        raise FileNotFoundError(
+            f"No image files ({', '.join(IMAGE_EXTS)}) found under {root}. "
+            "Did the download/unzip actually run? Run the diagnostic cell.")
+
+    by_stem = {p.stem: p for p in imgs}
     csv = _find_train_csv(root)
 
     if csv is not None:
         df = pd.read_csv(csv, dtype=str)
-        # locate the actual image for each id (folders vary between mirrors)
-        all_imgs = {p.stem: p for p in root.rglob("*.jpg")}
-        df["path"] = df.image_id.map(lambda i: str(all_imgs.get(i, "")))
-        df = df[df.path != ""].reset_index(drop=True)
-        return df[["image_id", "hotel_id", "path"]]
+        # tolerate an image_id column that already includes an extension
+        df["_stem"] = df.image_id.map(lambda i: Path(str(i)).stem)
+        df["path"] = df["_stem"].map(lambda s: str(by_stem.get(s, "")))
+        df = df[df.path != ""]
+        if len(df) > 0:
+            out = df[["image_id", "hotel_id", "path"]].reset_index(drop=True)
+            out["image_id"] = out.path.map(lambda p: Path(p).stem)  # keep ids == file stems
+            return out
+        # CSV present but nothing matched -> fall through to folder inference
 
-    # no csv: infer hotel_id from the parent folder name
-    rows = []
-    for p in root.rglob("*.jpg"):
-        rows.append({"image_id": p.stem, "hotel_id": p.parent.name, "path": str(p)})
-    if not rows:
-        raise FileNotFoundError(
-            f"No train.csv and no .jpg files found under {root}. "
-            "Did the download/unzip succeed?")
+    # infer hotel_id from the immediate parent folder name
+    rows = [{"image_id": p.stem, "hotel_id": p.parent.name, "path": str(p)}
+            for p in imgs]
     return pd.DataFrame(rows)
 
 
@@ -64,6 +83,12 @@ def images_per_hotel(index: pd.DataFrame) -> pd.Series:
 
 def summarize(root: str | Path) -> dict:
     idx = load_index(root)
+    if len(idx) == 0:
+        raise ValueError(
+            f"No images found under {root}. Check that the download step ran and "
+            "unzipped, that DATA_ROOT points at the unzipped folder, and that the "
+            "images are .jpg. Run the diagnostic cell to inspect the folder tree."
+        )
     per = images_per_hotel(idx)
     return {
         "source": "kaggle-hotel-id-2022-fgvc9",
