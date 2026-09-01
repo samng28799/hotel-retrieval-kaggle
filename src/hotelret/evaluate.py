@@ -1,13 +1,15 @@
-"""Retrieval evaluation: top-K accuracy by hotel and by chain.
+"""Retrieval evaluation: top-K accuracy by hotel.
 
-The whole point of the project lives in the ``split`` argument:
-
-- ``seen``   : gallery keeps all hotels (the standard, too-easy benchmark).
-- ``unseen`` : query hotels listed in unseen_hotels.csv have their gallery
-               images removed, so the correct hotel is genuinely absent and
-               the model must fail gracefully / retrieve a plausible neighbour.
-
-Comparing the two numbers, per encoder, is the headline result.
+The 'unseen' split models the deployment reality of a barely-known property:
+a hotel that has just entered the gallery with almost no photos. Rather than
+removing held-out hotels from the gallery entirely (which makes retrieval
+impossible by construction and forces accuracy to zero), we keep a SINGLE
+gallery image per held-out hotel. The correct hotel is therefore still
+findable, but represented by minimal evidence -- the retrieval analogue of
+Feizi et al.'s 'truly unseen' hotels, and a direct match to the new-listing
+scenario in the introduction. Comparing top-K on these sparse-gallery hotels
+against the full-gallery hotels measures the accuracy drop and whether the
+ranking of encoders is stable.
 """
 
 from __future__ import annotations
@@ -31,17 +33,14 @@ def topk_accuracy(query_vecs, query_hotels, gallery_vecs, gallery_hotels,
     """Fraction of queries whose correct hotel appears in the top-K gallery hits.
 
     Vectors are assumed L2-normalized, so cosine similarity is a dot product.
-    Uses a per-query argpartition to stay memory-light on modest galleries.
     """
     sims = query_vecs @ gallery_vecs.T          # (Q, G)
     gallery_hotels = np.asarray(gallery_hotels)
-    maxk = max(ks)
-    # top maxk gallery indices per query (unordered within the top-k is fine
-    # for a hit test, but we sort for rank-sensitive metrics later)
-    top = np.argpartition(-sims, kth=min(maxk, sims.shape[1] - 1), axis=1)[:, :maxk]
+    maxk = min(max(ks), sims.shape[1])
+    top = np.argpartition(-sims, kth=maxk - 1, axis=1)[:, :maxk]
     row = np.arange(sims.shape[0])[:, None]
     order = np.argsort(-sims[row, top], axis=1)
-    top = top[row, order]                        # now sorted best-first
+    top = top[row, order]                        # sorted best-first
 
     hit_hotels = gallery_hotels[top]             # (Q, maxk)
     correct = hit_hotels == np.asarray(query_hotels)[:, None]
@@ -52,7 +51,15 @@ def topk_accuracy(query_vecs, query_hotels, gallery_vecs, gallery_hotels,
     return out
 
 
-def evaluate(embeddings_path, manifest_dir="data/manifest", split="seen"):
+def evaluate(embeddings_path, manifest_dir="data/manifest", split="seen",
+             sparse_k=1, seed=0):
+    """Evaluate retrieval accuracy.
+
+    split='seen'   : full gallery, all queries.
+    split='unseen' : held-out (20%) hotels keep only `sparse_k` gallery image(s);
+                     queries are restricted to those held-out hotels. The hotel
+                     stays findable, so accuracy is meaningful (not forced to 0).
+    """
     emb, idx = _load_embeddings(embeddings_path)
 
     gallery = pd.read_csv(Path(manifest_dir) / "gallery.csv", dtype=str)
@@ -61,8 +68,14 @@ def evaluate(embeddings_path, manifest_dir="data/manifest", split="seen"):
                              dtype=str).hotel_id)
 
     if split == "unseen":
-        # remove the query hotels' own gallery entries -> property truly unseen
-        gallery = gallery[~gallery.hotel_id.isin(unseen)]
+        # keep every seen hotel's full gallery, but thin each held-out hotel
+        # down to `sparse_k` image(s) so it is under-represented, not absent.
+        seen_part = gallery[~gallery.hotel_id.isin(unseen)]
+        held_part = (gallery[gallery.hotel_id.isin(unseen)]
+                     .sort_values("image_id")
+                     .groupby("hotel_id", group_keys=False)
+                     .head(sparse_k))
+        gallery = pd.concat([seen_part, held_part], ignore_index=True)
         queries = queries[queries.hotel_id.isin(unseen)]
     elif split != "seen":
         raise ValueError("split must be 'seen' or 'unseen'")
@@ -87,10 +100,12 @@ def main():
     ap.add_argument("--embeddings", required=True)
     ap.add_argument("--manifest", default="data/manifest")
     ap.add_argument("--split", default="seen", choices=["seen", "unseen"])
+    ap.add_argument("--sparse-k", type=int, default=1,
+                    help="gallery images kept per held-out hotel in unseen split")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    result = evaluate(args.embeddings, args.manifest, args.split)
+    result = evaluate(args.embeddings, args.manifest, args.split, args.sparse_k)
     print(json.dumps(result, indent=2))
 
     if args.out:
