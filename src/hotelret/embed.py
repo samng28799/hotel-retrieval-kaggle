@@ -33,16 +33,22 @@ def available():
     return sorted(_ENCODERS)
 
 
+def _device():
+    import torch
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 @register("dinov2")
 def _load_dinov2():
     import torch
+    dev = _device()
     model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitl14")
-    model.eval()
+    model.eval().to(dev)
     dim = 1024
 
     def encode(batch):  # batch: (B,3,H,W) tensor already normalized
         with torch.no_grad():
-            return model(batch).cpu().numpy()
+            return model(batch.to(dev)).cpu().numpy()
     return encode, dim
 
 
@@ -50,14 +56,15 @@ def _load_dinov2():
 def _load_clip():
     import torch
     import open_clip
+    dev = _device()
     model, _, _ = open_clip.create_model_and_transforms(
         "ViT-L-14", pretrained="openai")
-    model.eval()
+    model.eval().to(dev)
     dim = 768
 
     def encode(batch):
         with torch.no_grad():
-            return model.encode_image(batch).cpu().numpy()
+            return model.encode_image(batch.to(dev)).cpu().numpy()
     return encode, dim
 
 
@@ -65,18 +72,19 @@ def _load_clip():
 def _load_sscd():
     """SSCD released as a standalone TorchScript model — no SSCD code needed."""
     import torch
+    dev = _device()
     weights = Path("external/sscd_disc_mixup.torchscript.pt")
     if not weights.exists():
         raise FileNotFoundError(
             "Download sscd_disc_mixup.torchscript.pt from "
             "github.com/facebookresearch/sscd-copy-detection into external/")
     model = torch.jit.load(str(weights))
-    model.eval()
+    model.eval().to(dev)
     dim = 512
 
     def encode(batch):
         with torch.no_grad():
-            return model(batch).cpu().numpy()
+            return model(batch.to(dev)).cpu().numpy()
     return encode, dim
 
 
@@ -88,8 +96,14 @@ def l2_normalize(x: np.ndarray) -> np.ndarray:
     return x / norms
 
 
-def extract(image_dir, model_name, out_path, batch_size=64, target=224):
-    """Extract embeddings for every image under image_dir. Lazy torch import."""
+def extract(image_dir, model_name, out_path, batch_size=64, target=224,
+            only_ids=None):
+    """Extract embeddings for images under image_dir.
+
+    If ``only_ids`` is given (an iterable of image_id stems), only those images
+    are embedded — use it to skip the ~half of the Kaggle set that isn't in the
+    manifest. Lazy torch import so the module loads in bare/test environments.
+    """
     import torch
     from PIL import Image
     import torchvision.transforms as T
@@ -107,18 +121,20 @@ def extract(image_dir, model_name, out_path, batch_size=64, target=224):
     ])
 
     paths = sorted(Path(image_dir).rglob("*.jpg"))
+    if only_ids is not None:
+        wanted = set(only_ids)
+        paths = [p for p in paths if p.stem in wanted]
     ids = [p.stem for p in paths]
-    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     vecs = []
     batch = []
     for p in paths:
         batch.append(tf(Image.open(p).convert("RGB")))
         if len(batch) == batch_size:
-            vecs.append(encode(torch.stack(batch).to(device)))
+            vecs.append(encode(torch.stack(batch)))
             batch = []
     if batch:
-        vecs.append(encode(torch.stack(batch).to(device)))
+        vecs.append(encode(torch.stack(batch)))
 
     emb = l2_normalize(np.concatenate(vecs).astype("float32"))
 
