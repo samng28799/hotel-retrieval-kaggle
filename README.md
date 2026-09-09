@@ -1,10 +1,8 @@
 # Hotel Recognition for Unseen Properties
 
-Comparing image-retrieval models on Hotels-50K, with a focus on how accuracy
+Comparing image-retrieval models on Kaggle (https://www.kaggle.com/c/hotel-id-to-combat-human-trafficking-2022-fgvc9), with a focus on how accuracy
 holds up on hotels the model never saw during training.
 
-**Course:** Deep Learning and Decision Making, TUM
-**Author:** Tran-Minh-Thu Nguyen (`sam.nguyen@tum.de`)
 
 ## What this does
 
@@ -40,8 +38,7 @@ everything after is cheap.
 pip install -e .
 
 # 2. get the dataset metadata (14 MB, ships in the official repo)
-git clone --depth 1 https://github.com/GWUvision/Hotels-50K.git external/Hotels-50K
-tar xzf external/Hotels-50K/input/dataset.tar.gz -C external/Hotels-50K/input/
+https://www.kaggle.com/c/hotel-id-to-combat-human-trafficking-2022-fgvc9
 
 # 3. GO/NO-GO: is the data still reachable, and does loss cluster by hotel?
 python -m hotelret.audit --metadata external/Hotels-50K/input/dataset --probe 300
