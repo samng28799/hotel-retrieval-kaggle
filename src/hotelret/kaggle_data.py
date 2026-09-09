@@ -103,30 +103,34 @@ def summarize(root: str | Path) -> dict:
 
 
 def build_split(root, n_hotels=1000, cap=40, min_images=15,
-                unseen_frac=0.20, seed=0):
+                unseen_frac=0.20, queries_per_hotel=1, seed=0):
     """Build gallery/query manifests and an unseen-hotel split.
 
     Kaggle has no separate labelled query set (test labels are hidden), so we
-    make our own: for each selected hotel, hold out some images as queries and
-    keep the rest as gallery. The unseen split additionally removes a subset of
-    hotels' galleries entirely, exactly as with Hotels-50K.
+    make our own: for each selected hotel, hold out `queries_per_hotel` images
+    as queries and keep the rest (capped) as gallery. Holding out more than one
+    query per hotel raises the query count and shrinks sampling noise in the
+    evaluation, at the cost of a slightly smaller gallery per hotel.
     """
     idx = load_index(root)
     per = images_per_hotel(idx)
 
-    eligible = per[per >= min_images].index.tolist()
+    # a hotel must have enough images to give up `queries_per_hotel` and still
+    # leave at least one gallery image behind
+    need = max(min_images, queries_per_hotel + 1)
+    eligible = per[per >= need].index.tolist()
     selected = eligible[:n_hotels]
     sub = idx[idx.hotel_id.isin(selected)].copy()
 
-    # per hotel: last image (deterministic) -> query, rest (capped) -> gallery
     sub = sub.sort_values(["hotel_id", "image_id"]).reset_index(drop=True)
     query_rows, gallery_rows = [], []
+    q = queries_per_hotel
     for hid, grp in sub.groupby("hotel_id"):
         grp = grp.reset_index(drop=True)
-        query_rows.append(grp.iloc[-1])                 # 1 held-out query
-        gallery_rows.append(grp.iloc[:-1].head(cap))    # rest as gallery, capped
+        query_rows.append(grp.iloc[-q:])            # last q images -> queries
+        gallery_rows.append(grp.iloc[:-q].head(cap))  # rest -> gallery, capped
     gallery = pd.concat(gallery_rows).reset_index(drop=True)
-    query = pd.DataFrame(query_rows).reset_index(drop=True)
+    query = pd.concat(query_rows).reset_index(drop=True)
 
     rng = pd.Series(selected).sample(frac=1.0, random_state=seed).tolist()
     n_unseen = max(1, int(len(rng) * unseen_frac))
